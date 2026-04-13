@@ -1,20 +1,26 @@
-# WOODSHED 🎸
-### Guitar Practice Tool — Phase 1
+# WOODSHED
+### Guitar Practice Tool
 *Raspberry Pi 5 + 7" touchscreen*
+
+An app to help you learn difficult musical passages. Load any audio file, slow it down without changing pitch, mark up the structure, loop the tricky bits, and let the Speed Trainer gradually push you back up to tempo — one rep at a time.
 
 ---
 
-## What it does
+## Features
 
-| Feature | Notes |
+| Feature | Details |
 |---|---|
-| **Speed** | 25–200% independent of pitch (Rubber Band library) |
-| **Pitch** | ±12 semitones independent of speed |
-| **A/B Loop** | Tap [A and B] buttons to set region, toggle LOOP |
-| **Markers** | Named markers, tap to jump, saved with session |
-| **EQ** | Low / Mid / High shelf (±12dB each) |
-| **Speed Trainer** | Auto-ramps tempo step by step, N reps per step |
-| **Session save/load** | Saves everything to ~/woodshed_session.json |
+| **Speed** | 25–120% of original tempo, independent of pitch (Rubber Band library) |
+| **Pitch** | ±12 semitones, independent of speed |
+| **A/B Loop** | Set loop in and out points with `[ A` / `B ]`, toggle with LOOP |
+| **Waveform** | Zoomable (1×–32×, snap to powers of 2), pannable, drag to select a loop region |
+| **Markers** | Named markers placed anywhere on the timeline; tap to jump, scroll carousel when there are many |
+| **Sections** | Save named A/B regions as reusable sections; displayed as labelled overlays on the waveform |
+| **EQ** | Low / Mid / High shelf (±12 dB each), master on/off toggle |
+| **Speed Trainer** | Auto-ramps tempo step by step; set start %, target %, step size, and reps per step |
+| **Curve mode** | Non-linear trainer option — reps required scale up quadratically as speed increases, reinforcing the hardest passages |
+| **Replay mode** | On play, snaps back to your last seek or marker jump position |
+| **Session save/load** | Saves speed, pitch, EQ, loop points, markers, and sections to `~/woodshed_session.json` |
 | **File browser** | Browse and open MP3, WAV, FLAC, AIFF, OGG, M4A |
 
 ---
@@ -22,9 +28,9 @@
 ## Setup
 
 ```bash
-git clone <your-repo> woodshed
+git clone https://github.com/aranyakhurana/woodshed.git
 cd woodshed
-bash setup.sh
+bash src/setup.sh
 ```
 
 ---
@@ -32,67 +38,54 @@ bash setup.sh
 ## Running
 
 ```bash
-# Basic
-python3 woodshed.py
+# Open the file browser on launch
+python3 src/woodshed.py
 
 # With a file preloaded
-python3 woodshed.py ~/Music/BB_King_TheThrill.mp3
+python3 src/woodshed.py ~/Music/mysong.mp3
 ```
 
 ### Autostart on Pi boot (optional)
 
-Add to `/etc/rc.local` before `exit 0`:
+Create a systemd service or add to `/etc/rc.local` before `exit 0`:
 ```bash
-DISPLAY=:0 python3 /home/pi/woodshed/woodshed.py &
+DISPLAY=:0 python3 /home/pi/woodshed/src/woodshed.py &
 ```
 
-Or create a systemd service for cleaner handling.
-
 ---
 
-## Audio output → HX Stomp
+## Controls
 
-1. Connect Behringer UCA202 (or similar USB interface) to Pi USB
-2. Set as default output: `sudo raspi-config` → Audio → USB Audio
-3. Run a stereo cable from UCA202 L/R out to HX Stomp **FX Return** (L+R)
-4. In HX Stomp: create a path that starts at Return, add your effects
-
----
-
-## Keyboard shortcuts
-
-| Key | Action |
+| Control | Action |
 |---|---|
 | `SPACE` | Play / Pause |
-| `←` / `→` | Seek ±5 seconds |
+| `← / →` | Seek ±5 seconds |
 | `ESC` | Quit |
 | Click waveform | Seek to position |
-| Click marker button | Jump to marker |
+| Drag waveform | Set A/B loop region |
+| Click marker | Jump to marker position |
+| Right-click marker | Rename or delete marker |
+| Click section | Restore that A/B region |
+| Right-click section | Rename or delete section |
 
 ---
 
 ## Speed Trainer workflow
 
-1. Set A/B loop points around the section you're working on
-2. Enable LOOP
-3. Set TRAIN START (e.g. 60%), TRAIN TARGET (100%), STEP (5%), REPS (2)
-4. Press TRAIN — it auto-advances tempo every N loops
-
----
-
-## Phase 2 (coming next)
-- Chord / key detection (librosa chroma)
-- Beat/BPM detection (aubio)
-- Stem separation (Demucs — offline preprocessing)
-- Per-song session files
-- Better EQ (parametric, not just shelves)
+1. Set A/B loop points around the passage you're working on
+2. Click **SPEED TRAINER** to start — it sets speed to your chosen start %
+3. The trainer advances tempo by the step amount every N loop repetitions
+4. Enable **CURVE** for harder passages — reps required increase as speed rises
+5. Click **SPEED TRAINER** again to stop
 
 ---
 
 ## Dependencies
-- `pyrubberband` — time/pitch stretching
-- `librosa` — audio analysis
-- `soundfile` — file I/O
-- `pygame` — display + audio output
+
+- `pygame` — UI and display
+- `sounddevice` — audio output
+- `rubberband` (C library) — real-time time/pitch stretching
+- `soundfile` — audio file I/O
+- `numpy` — signal processing
 - `scipy` — EQ filters
-- `numpy` — everything else
+- `librosa` — audio loading and resampling
