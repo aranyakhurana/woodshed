@@ -132,7 +132,7 @@ class AudioEngine:
 
         # Trainer
         self.trainer_on        = False
-        self.trainer_nonlinear = False   # True → reps scale quadratically with speed
+        self.trainer_nonlinear = True    # reps scale quadratically with speed
         self.trainer_start     = 0.50
         self.trainer_target    = 1.00
         self.trainer_step      = 0.05
@@ -785,6 +785,8 @@ class Slider:
         self.enabled    = True    # when False the effect is bypassed; label tap toggles this
         self._val_rect   = None   # set during draw; tapping resets to default
         self._label_rect = None   # set during draw; tapping toggles enabled
+        self._bm = None           # minus button rect, set each draw frame
+        self._bp = None           # plus  button rect, set each draw frame
 
     # ── Layout helpers ────────────────────────────────────────────────────────
 
@@ -810,10 +812,20 @@ class Slider:
     def draw(self, surf, fonts):
         r  = self.rect
         tr = self._track_rect()
-        bm, bp = self._btn_rects()
-        thumb_r = max(8, r.height + 4)
+        thumb_r = max(6, int((r.height + 4) * 0.75))
 
-        # −/+ buttons
+        # Label position: guaranteed gap between text bottom and thumb top
+        font_h  = fonts['sm'].get_height()
+        label_y = tr.centery - thumb_r - 2 - font_h
+
+        # −/+ buttons: top aligned to label text, bottom aligned to thumb bottom
+        btn_top = label_y
+        btn_bot = tr.centery + thumb_r
+        btn_h   = max(16, btn_bot - btn_top)
+        self._bm = pygame.Rect(r.x,            btn_top, _SL_BTN_W, btn_h)
+        self._bp = pygame.Rect(r.right - _SL_BTN_W, btn_top, _SL_BTN_W, btn_h)
+        bm, bp = self._bm, self._bp
+
         draw_rect(surf, DGREY, bm, radius=4)
         draw_rect(surf, DGREY, bp, radius=4)
         draw_text(surf, '−', fonts['sm'], WHITE, bm.centerx, bm.centery, 'center')
@@ -831,9 +843,6 @@ class Slider:
         tx = tr.x + int(tr.width * frac)
         pygame.draw.circle(surf, active_color, (tx, tr.centery), thumb_r)
         pygame.draw.circle(surf, BG, (tx, tr.centery), max(3, thumb_r - 5))
-
-        # Label + value — above the thumb row
-        label_y = r.y - thumb_r - 4
 
         if self.toggleable:
             # Label is a toggle indicator: dot + text, tappable
@@ -859,7 +868,8 @@ class Slider:
 
     def handle_event(self, event):
         tr = self._track_rect()
-        bm, bp = self._btn_rects()
+        bm = self._bm if self._bm is not None else self._btn_rects()[0]
+        bp = self._bp if self._bp is not None else self._btn_rects()[1]
 
         if event.type == pygame.MOUSEBUTTONDOWN:
             pos = event.pos
@@ -1090,7 +1100,7 @@ class Waveform:
                     vis_bx = self._to_screen(min(b_frac, self.view_end))
                     cx = (vis_ax + vis_bx) // 2
                     lbl = FONT_XS.render(sec_name[:14], True, PURPLE_DIM)
-                    surf.blit(lbl, (cx - lbl.get_width() // 2, r.y + 3))
+                    surf.blit(lbl, (cx - lbl.get_width() // 2, r.y + FONT_XS.get_height() + 4))
 
         # Loop region — A and B lines draw independently; shade only when both set
         if loop_a_frac is not None and loop_b_frac is not None:
@@ -1531,7 +1541,7 @@ class WoodshedApp:
         self.btn_load = Button(r1[2], 'LOAD')
 
         # ── Row 2: Transport + Loop controls ─────────────────────────────────
-        bh2 = int(H * 0.105)
+        bh2 = int(H * 0.085)
         by2 = by1 + bh1 + g
 
         # ◀◀  PLAY  ■  ▶▶  REPLAY  |  LOOP  [A  +A  B]  +B  CLR
@@ -1560,43 +1570,45 @@ class WoodshedApp:
 
         # ── Sliders — 3 columns ───────────────────────────────────────────────
         sl_h    = max(10, int(H * 0.022))
-        thumb_r = max(8, sl_h + 4)
+        thumb_r      = max(6, int((sl_h + 4) * 0.75))
+        thumb_r_full = max(8, sl_h + 4)   # original size — used for spacing only
         col_m   = pad * 6
         sw      = (W - 2*pad - 2*col_m) // 3
         sx      = [pad + i*(sw + col_m) for i in range(3)]
 
-        lbl_gap = thumb_r + 4 + int(H * 0.068)
+        lbl_gap = thumb_r_full + 4 + int(H * 0.068)
         row_gap = sl_h + pad * 2 + lbl_gap
 
         sy1 = by2 + bh2 + pad + lbl_gap
         sy2 = sy1 + row_gap
         sy3 = sy2 + row_gap
 
-        self.sl_speed = Slider((sx[0], sy1-20, sw, sl_h), 0.25, 2.0, 1.0, 'SPEED',
+        self.sl_speed = Slider((sx[0], sy1-12, sw, sl_h), 0.25, 2.0, 1.0, 'SPEED',
                                fmt='{:.0%}', color=GREEN, step=0.05, default=1.0, toggleable=True)
-        self.sl_pitch = Slider((sx[1], sy1-20, sw, sl_h), -12,  12,  0,   'PITCH',
+        self.sl_pitch = Slider((sx[1], sy1-12, sw, sl_h), -12,  12,  0,   'PITCH',
                                fmt='{:+.0f} st', color=GREEN, step=1, default=0, toggleable=True)
-        self.sl_vol   = Slider((sx[2], sy1-20, sw, sl_h), 0.0,  1.0, 0.8, 'VOLUME',
+        self.sl_vol   = Slider((sx[2], sy1-12, sw, sl_h), 0.0,  1.0, 0.8, 'VOLUME',
                                fmt='{:.0%}', color=GREEN, step=0.05, default=0.8, toggleable=True)
 
-        self.sl_eq_lo = Slider((sx[0], sy2-40, sw, sl_h), -12, 12, 0, 'EQ LOW',
+        self.sl_eq_lo = Slider((sx[0], sy2-30, sw, sl_h), -12, 12, 0, 'EQ LOW',
                                fmt='{:+.1f}dB', color=AMBER, step=1.0, default=0, toggleable=True)
-        self.sl_eq_md = Slider((sx[1], sy2-40, sw, sl_h), -12, 12, 0, 'EQ MID',
+        self.sl_eq_md = Slider((sx[1], sy2-30, sw, sl_h), -12, 12, 0, 'EQ MID',
                                fmt='{:+.1f}dB', color=AMBER, step=1.0, default=0, toggleable=True)
-        self.sl_eq_hi = Slider((sx[2], sy2-40, sw, sl_h), -12, 12, 0, 'EQ HIGH',
+        self.sl_eq_hi = Slider((sx[2], sy2-30, sw, sl_h), -12, 12, 0, 'EQ HIGH',
                                fmt='{:+.1f}dB', color=AMBER, step=1.0, default=0, toggleable=True)
 
         sw4  = (W - 2*pad - 3*col_m) // 4
         sx4  = [pad + i*(sw4 + col_m) for i in range(4)]
-        self.sl_tr_start  = Slider((sx4[0], sy3-55, sw4, sl_h), 0.25, 1.0, 0.5,  'TRAIN START',
+        self.sl_tr_start  = Slider((sx4[0], sy3-45, sw4, sl_h), 0.25, 1.0, 0.5,  'TRAIN START',
                                    fmt='{:.0%}', color=RED, step=0.05, default=0.5)
-        self.sl_tr_target = Slider((sx4[1], sy3-55, sw4, sl_h), 0.25, 1.2, 1.0,  'TRAIN TARGET',
+        self.sl_tr_target = Slider((sx4[1], sy3-45, sw4, sl_h), 0.25, 1.2, 1.0,  'TRAIN TARGET',
                                    fmt='{:.0%}', color=RED, step=0.05, default=1.0)
-        self.sl_tr_step   = Slider((sx4[2], sy3-55, sw4, sl_h), 0.01, 0.20, 0.05,'STEP',
+        self.sl_tr_step   = Slider((sx4[2], sy3-45, sw4, sl_h), 0.01, 0.20, 0.05,'STEP',
                                    fmt='{:.0%}', color=RED, step=0.01, default=0.05)
-        self.sl_tr_reps   = Slider((sx4[3], sy3-55, sw4, sl_h), 1,   10,   2,    'REPS/STEP',
+        self.sl_tr_reps   = Slider((sx4[3], sy3-45, sw4, sl_h), 1,   10,   2,    'REPS/STEP',
                                    fmt='{:.0f}x', color=RED, step=1,    default=2)
 
+        self._playback_toggle_rect = None   # set each frame in _draw; used for click detection
         self._eq_toggle_rect      = None   # set each frame in _draw; used for click detection
         self._trainer_toggle_rect = None   # set each frame in _draw; used for click detection
         self._trainer_curve_rect  = None   # CURVE mode toggle
@@ -1608,7 +1620,7 @@ class WoodshedApp:
         }
 
         status_h       = int(H * 0.068)
-        self.info_rect = pygame.Rect(pad, H - status_h - pad - 50, W - 2*pad, status_h)
+        self.info_rect = pygame.Rect(pad, H - status_h - 36, W - 2*pad, status_h)
 
         self.all_sliders = [
             self.sl_speed, self.sl_pitch, self.sl_vol,
@@ -1750,14 +1762,14 @@ class WoodshedApp:
                         extra_rects=(self.btn_pan_left.rect, self.btn_pan_right.rect),
                     )
                     if isinstance(wf_result, tuple):
-                        # Drag-select → set loop region
+                        # Drag-select → set A/B; only activate loop if already engaged
                         a_frac, b_frac = wf_result
                         e = self.engine
                         if e.raw is not None:
                             e.loop_a = int(a_frac * len(e.raw))
                             e.loop_b = int(b_frac * len(e.raw))
-                            e.loop_on = True
-                            self.btn_loop.active = True
+                            if self.btn_loop.active:
+                                e.loop_on = True
                             dur = e.duration_seconds
                             self.status = (f'Loop: {fmt_time(a_frac * dur)}'
                                            f' → {fmt_time(b_frac * dur)}')
@@ -1770,7 +1782,12 @@ class WoodshedApp:
                     sl.handle_event(event)
 
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                    if self._eq_toggle_rect and self._eq_toggle_rect.collidepoint(event.pos):
+                    if self._playback_toggle_rect and self._playback_toggle_rect.collidepoint(event.pos):
+                        _pb_sliders = [self.sl_speed, self.sl_pitch, self.sl_vol]
+                        _new_state  = not all(s.enabled for s in _pb_sliders)
+                        for s in _pb_sliders:
+                            s.enabled = _new_state
+                    elif self._eq_toggle_rect and self._eq_toggle_rect.collidepoint(event.pos):
                         self.engine.eq_enabled = not self.engine.eq_enabled
                     elif self._trainer_curve_rect and self._trainer_curve_rect.collidepoint(event.pos):
                         self.engine.trainer_nonlinear = not self.engine.trainer_nonlinear
@@ -2082,7 +2099,17 @@ class WoodshedApp:
             sl.draw(self.screen, f)
 
         lbl = self._sy_labels
-        draw_text(self.screen, '─ PLAYBACK ───────────────────────────────────────────────────────────────────────────────────────────────',      f['sm'], BORDER, 10, lbl['playback']+5, 'topleft')
+        pb_lbl_y  = lbl['playback'] + 5
+        pb_dot_cx = 16
+        pb_dot_cy = pb_lbl_y + f['sm'].get_height() // 2
+        _pb_sliders = [self.sl_speed, self.sl_pitch, self.sl_vol]
+        _pb_all_on  = all(s.enabled for s in _pb_sliders)
+        pb_dot_col  = GREEN if _pb_all_on else GREY
+        pb_lbl_col  = WHITE if _pb_all_on else GREY
+        pygame.draw.circle(self.screen, pb_dot_col, (pb_dot_cx, pb_dot_cy), 4)
+        pb_tr = draw_text(self.screen, 'PLAYBACK', f['sm'], pb_lbl_col, pb_dot_cx + 10, pb_lbl_y, 'topleft')
+        self._playback_toggle_rect = pygame.Rect(pb_dot_cx - 6, pb_lbl_y - 2, pb_tr.right - pb_dot_cx + 12, pb_tr.height + 4)
+        draw_text(self.screen, '─────────────────────────────────────────────────────────────────────────────────────────────────────', f['sm'], BORDER, pb_tr.right + 6, pb_lbl_y, 'topleft')
         # EQ section title — dot acts as master on/off toggle (same style as per-band labels)
         eq_lbl_y  = lbl['eq'] - 15
         dot_col   = GREEN if e.eq_enabled else GREY
